@@ -1,0 +1,68 @@
+{
+  "ret2shell_ws_link": {
+    "description": "Ret2Shell WebSocket 连接地址",
+    "type": "string",
+    "hint": "从 Ret2Shell 平台获取的 WebSocket 地址",
+    "obvious_hint": true
+  },
+  "public_umo": {
+    "description": "公开播报目标 UMO",
+    "type": "list",
+    "hint": "公开事件推送目标",
+    "default": []
+  },
+  "admin_umo": {
+    "description": "管理播报目标 UMO",
+    "type": "list",
+    "hint": "管理事件推送目标",
+    "default": []
+  },
+  "ops_umo": {
+    "description": "运维播报目标 UMO",
+    "type": "list",
+    "hint": "运维事件推送目标",
+    "default": []
+  },
+  "ret2shell_account": {
+    "description": "Ret2Shell 平台账号（可选）",
+    "type": "string",
+    "hint": "留空则按匿名只读模式运行。填写办赛方账号后可解锁 /challenge 等需要登录的功能，并启用断线通知补偿。"
+  },
+  "ret2shell_password": {
+    "description": "Ret2Shell 平台密码（可选）",
+    "type": "string",
+    "secret": true,
+    "hint": "需与账号同时填写才生效。注意：密码错误累计 5 次会导致该账号被冻结 30 分钟。此处仅隐藏界面显示，密码仍以明文保存在 AstrBot 配置文件中。"
+  },
+  "enabled_events": {
+    "description": "开启的事件类型（未勾选的不推送）",
+    "type": "list",
+    "render_type": "checkbox",
+    "hint": "勾选你想接收的事件类型，默认全部开启。注意：chat_message（队伍反馈）推送目标为管理群，从旧版本升级的用户需手动勾选才会开始播报。",
+    "default": [
+      "challenge_up", "challenge_down", "new_hint",
+      "blood_1", "blood_2", "blood_3",
+      "correct", "cheated", "too_quick", "chat_message",
+      "new_notification", "freeze", "unfreeze",
+      "cluster_overloaded", "cluster_recovered", "server_panic"
+    ],
+    "options": [
+      "challenge_up",
+      "challenge_down",
+      "new_hint",
+      "blood_1",
+      "blood_2",
+      "blood_3",
+      "correct",
+      "cheated",
+      "too_quick",
+      "chat_message",
+      "new_notification",
+      "freeze",
+      "unfreeze",
+      "cluster_overloaded",
+      "cluster_recovered",
+      "server_panic"
+    ]
+  }
+}

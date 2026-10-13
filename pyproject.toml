@@ -1,0 +1,15 @@
+[project]
+name = "astrbot-plugin-ret2shell"
+version = "1.3.0"
+description = "Ret2Shell 赛事事件推送插件"
+readme = "README.md"
+authors = [{name = "decimo", email = ""}]
+license = {text = "AGPL-3.0-or-later"}
+dependencies = [
+    "websockets>=12.0",
+    "httpx>=0.24.0"
+]
+requires-python = ">=3.9"
+
+[tool.astrbot]
+plugin_class = "Ret2ShellPlugin"
