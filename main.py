@@ -14,7 +14,7 @@ from astrbot.api.event import filter, AstrMessageEvent, MessageChain
 from astrbot.api.star import Context, Star, StarTools
 
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 USER_AGENT = f"astrbot-ret2shell/{VERSION}"
 
 # 服务端 Event 枚举的 5 个外部标签，顺序需与 crates/event/src/events.rs 保持一致
@@ -35,31 +35,64 @@ GAME_NAME_CACHE_TTL = 1800
 NETWORK_ERROR = 0
 
 STATE_FILE_NAME = "notification_state.json"
-FALLBACK_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 # 停机后重启时，待补通知超过这个数量就只重建基线、不补播，避免刷屏
 MAX_STARTUP_COMPENSATION = 10
 
 _state_file_path: Optional[str] = None
+_state_file_resolved = False
 
 
-def resolve_state_file() -> str:
-    """返回通知状态文件的绝对路径。
+def resolve_state_file() -> Optional[str]:
+    """返回通知状态文件的绝对路径；拿不到官方数据目录时返回 None。
 
-    优先用 AstrBot 官方的插件数据目录（data/plugin_data/<plugin>）。它依赖
-    star_map 里的插件元数据，只能在插件加载之后调用，不能在导入期调用，
-    因此这里惰性解析并缓存。拿不到就退回插件目录下的 data/。
+    持久化只允许写进 AstrBot 的插件数据目录（data/plugin_data/<plugin>）。
+    它依赖 star_map 里的插件元数据，只能在插件加载之后调用、不能在导入期
+    调用，因此这里惰性解析并缓存。解析失败就放弃落盘、退回纯内存状态：
+    写到插件自身目录的数据会在更新/重装时丢失，也脱离 AstrBot 的统一备份。
     """
-    global _state_file_path
-    if _state_file_path is not None:
+    global _state_file_path, _state_file_resolved
+    if _state_file_resolved:
         return _state_file_path
+    _state_file_resolved = True
+
     try:
-        base = str(StarTools.get_data_dir())
+        base = str(StarTools.get_data_dir() or "")
     except Exception as e:
-        base = FALLBACK_DATA_DIR
-        logger.warning(f"⚠️ 无法获取 AstrBot 插件数据目录（{e}），改用 {base}")
+        logger.error(f"❌ 获取 AstrBot 插件数据目录失败: {e}")
+        base = ""
+
+    if not base:
+        logger.error(
+            "❌ 没有可用的插件数据目录，通知状态只保存在内存中；"
+            "重启后无法补播停机期间遗漏的通知"
+        )
+        return None
+
     _state_file_path = os.path.join(base, STATE_FILE_NAME)
+    logger.info(f"📢 通知状态文件: {_state_file_path}")
     return _state_file_path
+
+
+def mask_ws_url(url) -> str:
+    """脱敏 WebSocket 链接，供日志与群消息输出。
+
+    查询串里的 token 是赛事级凭据，拿到它就能伪造事件推送。除 game_id
+    （状态命令本来就会单独展示、也算不上凭据）外，参数值一律替换为 ***。
+    """
+    if not isinstance(url, str) or not url:
+        return "未配置"
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return "(无法解析的 WebSocket 链接)"
+    if not parsed.query:
+        return url
+    query = "&".join(
+        f"{key}={value}" if key == "game_id" else f"{key}=***"
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+    )
+    return f"{url.split('?', 1)[0]}?{query}"
 
 
 def describe_http_status(status: int) -> str:
@@ -177,7 +210,7 @@ class Ret2ShellPlugin(Star):
         urlparsed = urlparse(self.ws_url)
         game_id = dict(parse_qsl(urlparsed.query)).get("game_id") or ""
         if not game_id.isdigit():
-            logger.error(f"❌ 无法从 WebSocket 链接解析出 game_id: {self.ws_url}")
+            logger.error(f"❌ 无法从 WebSocket 链接解析出 game_id: {mask_ws_url(self.ws_url)}")
             return False
 
         scheme = urlparsed.scheme
@@ -309,8 +342,12 @@ class Ret2ShellPlugin(Star):
         恢复成功意味着我们参考的是「上次运行的事实」而不是「本次启动的快照」，
         因此停机期间新增的通知也能被补上，启动时也不存在需要「建基线」的窗口。
         """
+        path = resolve_state_file()
+        if path is None:
+            logger.info("📢 通知状态无处落盘，按首次运行处理")
+            return False
         try:
-            with open(resolve_state_file(), encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 state = json.load(f)
         except FileNotFoundError:
             logger.info("📢 未找到通知状态文件，按首次运行处理")
@@ -337,8 +374,11 @@ class Ret2ShellPlugin(Star):
         return True
 
     def _save_notification_state(self):
+        path = resolve_state_file()
+        if path is None:
+            # 原因已在 resolve_state_file 里说明过，这里静默跳过以免反复刷日志
+            return
         try:
-            path = resolve_state_file()
             os.makedirs(os.path.dirname(path), exist_ok=True)
             tmp = f"{path}.tmp"
             with open(tmp, "w", encoding="utf-8") as f:
@@ -453,7 +493,7 @@ class Ret2ShellPlugin(Star):
         first_connect = True
         while self.running:
             try:
-                logger.info(f"🔌 正在连接 Ret2Shell: {self.ws_url[:60]}...")
+                logger.info(f"🔌 正在连接 Ret2Shell: {mask_ws_url(self.ws_url)}")
                 async with connect(self.ws_url) as websocket:
                     logger.info("✅ Ret2Shell WebSocket 连接成功！")
                     backoff = RECONNECT_BASE_DELAY
@@ -793,14 +833,16 @@ class Ret2ShellPlugin(Star):
 
     @filter.command("ret2shell_status")
     async def status(self, event: AstrMessageEvent):
+        persist = '🟢 已启用' if resolve_state_file() else '🟡 不可用（仅内存）'
         status_msg = f"""
 📊 Ret2Shell 插件状态:
 - 版本: {VERSION}
 - WebSocket 连接: {'🟢 运行中' if self.running else '🔴 已停止'}
-- WS 地址: {self.ws_url[:50] + '...' if self.ws_url else '未配置'}
+- WS 地址: {mask_ws_url(self.ws_url)}
 - Game ID: {self.game_id or '未解析'}
 - 平台鉴权: {'🟢 已启用' if self.authenticated else '⚪ 未启用（匿名只读）'}
 - 通知补偿: {self._compensation_status()}
+- 状态落盘: {persist}
 - 公开目标: {self.public_umo or '未配置'}
 - 管理目标: {self.admin_umo or '未配置'}
 - 运维目标: {self.ops_umo or '未配置'}
