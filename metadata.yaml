@@ -1,4 +1,4 @@
-name: astrbot_plugin_ret2shell
+name: astrbot_plugin_ret2shell_event_report
 display_name: Ret2Shell 赛事事件播报
 desc: |
   对接 Ret 2 Shell (回归终端) 赛事事件推送 WebSocket API，
@@ -20,7 +20,7 @@ desc: |
   - ops_umo: 运维播报目标 UMO 列表
 version: 1.3.0
 author: decimo
-repo: https://github.com/imdecimo/astrbot_plugin_ret2shell
+repo: https://github.com/imdecimo/astrbot_plugin_ret2shell_event_report
 astrbot_version: ">=4.17.0"
 support_platforms:
   - aiocqhttp

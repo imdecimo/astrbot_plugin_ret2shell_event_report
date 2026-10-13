@@ -1,5 +1,5 @@
 [project]
-name = "astrbot-plugin-ret2shell"
+name = "astrbot-plugin-ret2shell-event-report"
 version = "1.3.0"
 description = "Ret2Shell 赛事事件推送插件"
 readme = "README.md"
